@@ -1,2 +1,2 @@
 # sagemage
-Systematic Agentic Modular Analytic Generative Engineering
+Systematic Agentic Modular Analytic Generative Engineering Framework
