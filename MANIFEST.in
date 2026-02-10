@@ -1,6 +1,8 @@
 include README.md
+include manual.md
+include changes.md
 include LICENSE
-include CHANGELOG.md
-recursive-include sagemage *.py *.txt py.typed
+include CONTRIBUTING.md
+recursive-include sagemage *.py *.txt *.json *.csv py.typed
 recursive-include tests *.py
 recursive-include docs *

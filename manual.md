@@ -1,0 +1,428 @@
+# SAGEMAGE User Manual
+
+A comprehensive guide to using the SAGEMAGE framework for building systematic, data-driven agentic solutions.
+
+## Table of Contents
+
+1. [Installation](#installation)
+2. [Quick Start](#quick-start)
+3. [Core Concepts](#core-concepts)
+4. [Working with ParamSet](#working-with-paramset)
+5. [Creating and Running Agents](#creating-and-running-agents)
+6. [Managing Datasets](#managing-datasets)
+7. [API Integration](#api-integration)
+8. [Built-In Examples](#built-in-examples)
+9. [Advanced Usage](#advanced-usage)
+
+## Installation
+
+### From PyPI
+```bash
+pip install sagemage
+```
+
+### From GitHub
+```bash
+pip install git+https://github.com/Yaniv1/sagemage.git
+```
+
+### Development Install
+```bash
+git clone https://github.com/Yaniv1/sagemage.git
+cd sagemage
+pip install -e .
+```
+
+## Quick Start
+
+### Hello Sagemage
+```python
+from sagemage import Agent, ParamSet
+
+# Create an agent with configuration
+config = {
+    "name": "my_agent",
+    "model": "gpt-4",
+    "temperature": 0.7
+}
+
+agent = Agent(config)
+print(agent.get())  # View all parameters
+print(agent.get(["name", "model"]))  # View specific parameters
+```
+
+## Core Concepts
+
+### ParamSet
+Manages configuration and parameters with:
+- Dictionary or JSON file loading
+- Hierarchical parameter access
+- Baseline/inheritance support
+
+### Agent
+Represents an operational agent that:
+- Extends ParamSet for configuration
+- Orchestrates data processing and API calls
+- Produces structured results
+
+### Dataset
+Handles data loading, chunking, and processing:
+- CSV file loading
+- Grouping and chunking
+- Column selection and flattening
+
+### ApiClient
+Manages LLM interactions:
+- Prompt construction
+- API communication
+- Response parsing
+
+## Working with ParamSet
+
+### Loading Configuration
+
+**From Dictionary:**
+```python
+from sagemage import ParamSet
+
+params = ParamSet({
+    "temperature": 0.7,
+    "max_tokens": 1000,
+    "model": "gpt-4"
+})
+```
+
+**From JSON File:**
+```python
+params = ParamSet("path/to/config.json")
+```
+
+**With Baseline/Defaults:**
+```python
+defaults = ParamSet({"temperature": 1.0, "max_tokens": 2000})
+custom = ParamSet({"temperature": 0.5}, baseline=defaults)
+
+# Get all params (merged with defaults)
+merged = custom.get()
+```
+
+### Accessing Parameters
+
+```python
+# Get all parameters
+all_params = params.get()
+
+# Get specific parameters
+subset = params.get(["temperature", "model"])
+
+# Set parameters
+params.set(temperature=0.9, verbose=True)
+
+# Set from JSON string
+params.set(nest=True, config='{"temperature": 0.8}')
+```
+
+## Creating and Running Agents
+
+### Basic Agent Configuration
+
+Create a configuration JSON:
+```json
+{
+  "name": "classifier",
+  "api_key": "settings/api_key.txt",
+  "input_file": "inputs/data.csv",
+  "dataset_name": "my_dataset",
+  "dataset_id_column": "id",
+  "dataset_columns": ["text"],
+  "instructions": "instructions/prompt.txt",
+  "output_path": "results",
+  "chunk_size": 10
+}
+```
+
+### Running an Agent
+
+```python
+from sagemage import Agent
+import json
+
+# Load configuration
+with open("config.json") as f:
+    config = json.load(f)
+
+# Create agent
+agent = Agent(config)
+
+# Run the agent
+results = agent.run(project_dir="/path/to/project")
+
+# Results is a pandas DataFrame
+print(results)
+print(results.head())
+```
+
+### Agent Lifecycle
+
+1. **Configuration** - Define parameters including input files, API key, instructions
+2. **Dataset Loading** - Agent loads data from `input_file`
+3. **Chunking** - Data is split into chunks based on `chunk_size`
+4. **Processing** - For each chunk:
+   - Read instructions and resources
+   - Build prompt with data
+   - Call LLM API
+   - Parse responses
+   - Save per-chunk results
+5. **Results** - Concatenated results returned as DataFrame
+
+## Managing Datasets
+
+### Creating a Dataset
+
+```python
+from sagemage import Dataset
+
+dataset = Dataset(
+    input_path="data/input.csv",
+    output_path="data/output",
+    id_column="id",
+    columns=["name", "description"],
+    chunk_size=5
+)
+
+# Access chunks
+for chunk_name, chunk_data in dataset.chunks.items():
+    print(f"Processing {chunk_name}")
+    print(chunk_data)
+```
+
+### Supported Operations
+
+- **Loading:** CSV files with pandas
+- **Grouping:** By ID column
+- **Chunking:** Fixed size batches
+- **Selection:** Specific column subsets
+- **Flattening:** Nested structures to tabular format
+
+## API Integration
+
+### ApiClient Usage
+
+```python
+from sagemage import ApiClient
+
+client = ApiClient(api_key="sk-...")
+
+# Construct a prompt
+prompt = client.construct_prompt(
+    items=["instruction text"],
+    data=["item1", "item2", "item3"],
+    resources=["<context>metadata</context>"]
+)
+
+# Get response from LLM
+response = client.get_response(prompt)
+
+# Parse response
+results_df = client.parse_response(
+    response,
+    format="json",
+    json_node="results"
+)
+```
+
+## Built-In Examples
+
+### Running the FooFoo Example
+
+The foofoo example demonstrates the complete workflow: config, input data, instructions, and agent execution.
+
+#### Method 1: Direct Function Call
+
+```python
+from sagemage.examples.foofoo.py.foofoo import foofoo
+
+# Create and run in default location
+results = foofoo()
+
+# Run with custom location and API key
+results = foofoo(
+    base_dir="/my/work/foofoo_test",
+    api_key_value="sk-your-key-here"
+)
+
+# Run with reset to start fresh after experiments
+results = foofoo(
+    base_dir="/my/work/foofoo_test",
+    reset=True
+)
+```
+
+#### Method 2: Module Execution
+
+```bash
+# From command line
+python -m sagemage.examples.foofoo.py.foofoo
+```
+
+#### What the FooFoo Example Does
+
+1. **Creates Local Workspace:**
+   - `settings/foofoo.json` - Agent configuration
+   - `settings/api_key.txt` - API key
+   - `inputs/foofoo_input.csv` - Sample data (animals, objects, etc.)
+   - `instructions/foofoo.txt` - Classification prompt
+   - `results/` - Output directory
+
+2. **Runs Classification Task:**
+   - Reads items from CSV
+   - Sends to LLM with classification instruction
+   - Parses structured JSON response
+   - Returns results as DataFrame
+
+3. **Example Output:**
+   ```
+   | item_id | name              | type      |
+   |---------|-------------------|-----------|
+   | 1       | cat               | animal    |
+   | 2       | dog               | animal    |
+   | 3       | apple             | fruit     |
+   | 4       | tree              | plant     |
+   | 5       | astronaut         | person    |
+   ```
+
+#### Using the Reset Flag
+
+```python
+# First run - creates workspace
+foofoo(base_dir="/my/work/test1")
+
+# After experimenting, reset to clean state
+foofoo(base_dir="/my/work/test1", reset=True)
+
+# This removes config/inputs/instructions and rebuilds them
+# Useful for restarting after modifications or failed runs
+```
+
+## Advanced Usage
+
+### Custom Agent Configuration
+
+```python
+# Full configuration with all options
+config = {
+    "type": "GENERATIVE_ANALYZER",
+    "name": "advanced_agent",
+    "run": True,
+    
+    # Paths
+    "project_dir": "./",
+    "api_key": "settings/api_key.txt",
+    "input_file": "inputs/data.csv",
+    "instructions": "instructions/prompt.txt",
+    "resources": "resources/context.json",
+    "output_path": "results",
+    
+    # Dataset configuration
+    "dataset_name": "dataset",
+    "dataset_id_column": "id",
+    "dataset_columns": ["text", "metadata"],
+    "textual": "text",  # Primary text column
+    
+    # Processing
+    "chunk_size": 10,
+    "max_items": -1,  # -1 means no limit
+    
+    # Output
+    "output_file": "results.csv",
+    "output_extension": "json",
+    "json_node": "results",
+    "result_columns": ["id", "text", "classification"],
+    
+    # Metadata
+    "verbose": True,
+    "analyze": False
+}
+
+agent = Agent(config)
+results = agent.run(project_dir="/data/my_project")
+```
+
+### Utility Functions
+
+```python
+from sagemage import print_dict, flatten_dataframe, save_to_path
+
+# Pretty print configuration
+print_dict(agent.get())
+
+# Flatten nested DataFrames
+flat_df = flatten_dataframe(nested_df, sep="_")
+
+# Save results with automatic path creation
+save_to_path(results, "outputs/analysis/results.csv")
+```
+
+### Extending for Custom Workflows
+
+```python
+from sagemage import Agent, Dataset, ApiClient
+
+class CustomAgent(Agent):
+    def run_custom(self, project_dir):
+        # Custom processing logic
+        dataset = Dataset(
+            input_path=self.get(["input_file"])[0],
+            chunk_size=self.get(["chunk_size"])[0]
+        )
+        
+        # Your custom business logic here
+        return dataset
+
+agent = CustomAgent(config)
+results = agent.run_custom(project_dir)
+```
+
+## Troubleshooting
+
+### Issue: "ModuleNotFoundError: No module named 'pandas'"
+**Solution:** Install dependencies:
+```bash
+pip install sagemage[dev]
+```
+
+### Issue: API Key Not Found
+**Solution:** Ensure api_key file exists and path is correct:
+```python
+# Verify path
+with open("settings/api_key.txt") as f:
+    key = f.read().strip()
+```
+
+### Issue: "No such file or directory: inputs/data.csv"
+**Solution:** Verify input_file path is relative to project_dir:
+```python
+# If project_dir is "/my/work", input_file should be relative to that
+agent.run(project_dir="/my/work")  # Looks for /my/work/inputs/data.csv
+```
+
+### Issue: Empty Results
+**Solution:** Check if API is being called:
+```python
+# Verify API key is valid
+# Check verbose output
+config["verbose"] = True
+agent = Agent(config)
+results = agent.run()
+```
+
+## Resources
+
+- [Architecture Documentation](./architecture.md) - Technical details on package structure
+- [Contributing Guidelines](./CONTRIBUTING.md) - How to contribute
+- [Changes Log](./changes.md) - Version history
+
+## Support
+
+For issues, questions, or contributions, visit:
+https://github.com/Yaniv1/sagemage

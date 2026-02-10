@@ -1,0 +1,1 @@
+classify each item, return the results as a json array with the following items: item_id, name, type

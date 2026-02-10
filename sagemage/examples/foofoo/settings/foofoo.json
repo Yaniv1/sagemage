@@ -1,0 +1,33 @@
+{
+  "type": "GENERATIVE_ANALYZER",
+  "run": true,
+  "delta": true,
+  "project_dir": "./",
+  "readme": "readme.txt",
+  "name": "foofoo_agent",
+  "api_key": "settings/api_key.txt",
+  "input_file": "inputs/foofoo_input.csv",
+  "dataset_name": "foofoo",
+  "dataset_id_column": "item_id",
+  "dataset_columns": ["name"],
+  "result_columns": ["item_id", "name", "type"],
+  "instructions": "instructions/foofoo.txt",
+  "resources": "",
+  "output_path": "results/test",
+  "output_datasets": {
+    "input_files": "input_files",
+    "result_files": "result_files",
+    "prompts": "prompts",
+    "analysis": "analysis"
+  },
+  "output_version": "%Y-%m-%d-%H-%M-%S",
+  "output_file": "test.csv",
+  "chunk_size": 2,
+  "max_items": -1,
+  "execute": true,
+  "analyze": false,
+  "verbose": true,
+  "textual": "name",
+  "output_extension": "json",
+  "json_node": "results"
+}
