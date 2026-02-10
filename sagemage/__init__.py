@@ -2,6 +2,7 @@
 
 import re
 import os
+import sys
 
 
 def _get_version(default="0.0.0"):
@@ -20,11 +21,30 @@ __author__ = "Yaniv Mordecai"
 __email__ = "modelanalyzer@gmail.com"
 __license__ = "MIT"
 
-# Import core classes
-from .api_client import ApiClient
-from .core import Agent, ParamSet
-from .dataset import Dataset
-from .utils import flatten_dataframe, print_dict, save_to_path, setattrs
+
+# Lazy imports: only import when module is actually used, not during build
+def __getattr__(name):
+    """Lazy import of submodules to avoid dependency issues during package build."""
+    import importlib
+    
+    _lazy_modules = {
+        "ApiClient": ("api_client", "ApiClient"),
+        "Agent": ("core", "Agent"),
+        "ParamSet": ("core", "ParamSet"),
+        "Dataset": ("dataset", "Dataset"),
+        "flatten_dataframe": ("utils", "flatten_dataframe"),
+        "print_dict": ("utils", "print_dict"),
+        "save_to_path": ("utils", "save_to_path"),
+        "setattrs": ("utils", "setattrs"),
+    }
+    
+    if name in _lazy_modules:
+        module_name, attr_name = _lazy_modules[name]
+        module = importlib.import_module(f".{module_name}", package=__name__)
+        return getattr(module, attr_name)
+    
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ParamSet",

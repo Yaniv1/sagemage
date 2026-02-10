@@ -15,9 +15,9 @@ dependencies = [
     "openai>=1.0.0",
 ]
 authors = [
-    {name = "Your Name", email = "your.email@example.com"}
+    {name = "Yaniv Mordecai", email = "modelanalyzer@gmail.com"}
 ]
-keywords = ["sagemage", "agentic", "engineering", "framework", "modular", "generative"]
+keywords = ["sagemage"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
