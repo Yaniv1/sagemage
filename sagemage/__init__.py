@@ -4,21 +4,18 @@ import re
 import os
 
 
-def _get_version():
-    """Extract version from pyproject.toml"""
-    pyproject_path = os.path.join(os.path.dirname(__file__), '..', 'pyproject.toml')
+def _get_version(default="0.0.0"):
+    """Extract version from version.txt (single source of truth)."""
+    version_file = os.path.join(os.path.dirname(__file__), 'version.txt')
     try:
-        with open(pyproject_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-            match = re.search(r'^\s*version\s*=\s*["\']([^"\']+)["\']', content, re.MULTILINE)
-            if match:
-                return match.group(1)
-    except Exception:
-        pass
-    return "0.0.0"
+        with open(version_file, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except (FileNotFoundError, IOError):
+        # Fallback if version.txt not found (shouldn't happen)
+        return default
 
 
-__version__ = _get_version()
+__version__ = _get_version("0.1.1")
 __author__ = "Yaniv Mordecai"
 __email__ = "modelanalyzer@gmail.com"
 __license__ = "MIT"

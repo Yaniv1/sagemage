@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sagemage"
-version = "0.1.1"
+dynamic = ["version"]
 description = "Systematic Agentic Modular Analytic Generative Engineering Framework"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -80,3 +80,6 @@ disallow_untyped_defs = false
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=sagemage --cov-report=html --cov-report=term-missing"
+
+[tool.setuptools.dynamic]
+version = {file = ["sagemage/version.txt"]}
