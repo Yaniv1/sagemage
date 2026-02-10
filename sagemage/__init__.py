@@ -31,16 +31,20 @@ def __getattr__(name):
         "ApiClient": ("api_client", "ApiClient"),
         "Agent": ("core", "Agent"),
         "ParamSet": ("core", "ParamSet"),
+        "AgentSet": ("core", "AgentSet"),
         "Dataset": ("dataset", "Dataset"),
         "flatten_dataframe": ("utils", "flatten_dataframe"),
         "print_dict": ("utils", "print_dict"),
         "save_to_path": ("utils", "save_to_path"),
         "setattrs": ("utils", "setattrs"),
+        "examples": ("examples", None),  # Import whole module, not a specific attribute
     }
     
     if name in _lazy_modules:
         module_name, attr_name = _lazy_modules[name]
         module = importlib.import_module(f".{module_name}", package=__name__)
+        if attr_name is None:
+            return module
         return getattr(module, attr_name)
     
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
@@ -49,10 +53,12 @@ def __getattr__(name):
 __all__ = [
     "ParamSet",
     "Agent",
+    "AgentSet",
     "Dataset",
     "ApiClient",
     "print_dict",
     "save_to_path",
     "setattrs",
     "flatten_dataframe",
+    "examples",
 ]
