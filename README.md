@@ -37,9 +37,78 @@ print(results)
 ### Core Components
 
 - **ParamSet** - Configuration management with inheritance and JSON support
-- **Agent** - Orchestrates data processing and LLM interactions
-- **Dataset** - Handles data loading, chunking, and processing
+- **Agent** - Orchestrates data processing and LLM interactions with multi-inlet support
+- **Dataset** - Handles data loading, chunking, and processing with per-inlet configuration
 - **ApiClient** - Manages LLM prompts and responses
+- **Agent Memory (AM)** - Enables chaining agents via inlet/outlet connections
+
+### Multi-Inlet Support
+
+Agents can consume multiple input datasets with independent chunk sizes:
+
+```json
+{
+  "my_agent": {
+    "inlets": [
+      {
+        "uri": "data/objects.csv",
+        "type": "FS",
+        "dataset_name": "objects",
+        "dataset_id_column": "id",
+        "dataset_columns": ["name"],
+        "chunk_size": 2
+      },
+      {
+        "uri": "data/categories.csv",
+        "type": "FS",
+        "dataset_name": "categories",
+        "dataset_id_column": "cat_id",
+        "dataset_columns": ["category"],
+        "chunk_size": -1
+      }
+    ],
+    "outlets": [
+      {
+        "uri": "results/output.csv",
+        "type": "FS",
+        "dataset_name": "objects",
+        "result_columns": ["id", "name", "category"]
+      },
+      {
+        "uri": "my_agent",
+        "type": "AM",
+        "result_columns": ["id", "name", "category"]
+      }
+    ]
+  }
+}
+```
+
+Features:
+- **Cartesian combinations** - Multiple inlets create combinations (e.g., 2 chunks × 1 chunk = 2 combinations)
+- **Per-inlet configuration** - Each inlet specifies dataset name, ID column, and columns to import
+- **Independent chunking** - `chunk_size: -1` means no chunking (treat entire dataset as one chunk)
+- **Agent chaining** - AM outlets enable downstream agents to consume upstream results
+- **Result routing** - Single results set distributed to multiple outlets with different column configurations
+
+### Examples & Demo
+
+- Use the simple demo dispatcher to run packaged examples:
+
+```python
+from sagemage.examples import demo, list_examples
+
+# show available examples
+print(list_examples())
+
+# run the default example ("foofoo")
+demo()
+
+# run a named example into a custom folder
+demo("foofoo", base_dir="/tmp/myfoo", api_key_value="sk-...", reset=True)
+```
+
+Examples are included under `sagemage/examples` and are packaged with the distribution.
 
 ### Built-In Examples
 

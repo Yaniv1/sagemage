@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Core framework foundation
 - Initial release
 - Project scaffolding and packaging setup
+- Examples folder and demo activation mechanism.
 
 
 ### Changed

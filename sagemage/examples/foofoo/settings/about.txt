@@ -1,0 +1,3 @@
+foofoo demo: a small classifier that tags items by type, followed by an analyzer that summarizes tag counts and shares.
+
+This demo shows how `AgentSet` chains a classifier's output into an analyzer using `input_from`.

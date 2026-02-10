@@ -14,74 +14,33 @@ A comprehensive guide to using the SAGEMAGE framework for building systematic, d
 8. [Built-In Examples](#built-in-examples)
 9. [Advanced Usage](#advanced-usage)
 
-## Installation
+The packaged examples demonstrate the complete workflow: configuration, input data, instructions, and agent execution. Use the unified `demo()` dispatcher to list and run examples.
 
 ### From PyPI
-```bash
-pip install sagemage
-```
 
-### From GitHub
-```bash
-pip install git+https://github.com/Yaniv1/sagemage.git
-```
+#### Listing examples
 
-### Development Install
-```bash
-git clone https://github.com/Yaniv1/sagemage.git
-cd sagemage
-pip install -e .
-```
-
-## Quick Start
-
-### Hello Sagemage
 ```python
-from sagemage import Agent, ParamSet
-
-# Create an agent with configuration
-config = {
-    "name": "my_agent",
-    "model": "gpt-4",
-    "temperature": 0.7
-}
-
-agent = Agent(config)
-print(agent.get())  # View all parameters
-print(agent.get(["name", "model"]))  # View specific parameters
+from sagemage.examples import list_examples
+print(list_examples())
 ```
 
-## Core Concepts
+#### Running an example (recommended)
 
-### ParamSet
-Manages configuration and parameters with:
-- Dictionary or JSON file loading
-- Hierarchical parameter access
-- Baseline/inheritance support
+```python
+from sagemage.examples import demo
 
-### Agent
-Represents an operational agent that:
-- Extends ParamSet for configuration
-- Orchestrates data processing and API calls
-- Produces structured results
+# Default (runs "foofoo" into ./foofoo)
+demo()
 
-### Dataset
-Handles data loading, chunking, and processing:
-- CSV file loading
-- Grouping and chunking
-- Column selection and flattening
+# Run into a custom folder and provide an API key
+demo("foofoo", base_dir="/my/work/foofoo_test", api_key_value="sk-your-key")
 
-### ApiClient
-Manages LLM interactions:
-- Prompt construction
-- API communication
-- Response parsing
+# Reset the example workspace before running
+demo("foofoo", base_dir="/my/work/foofoo_test", reset=True)
+```
 
-## Working with ParamSet
-
-### Loading Configuration
-
-**From Dictionary:**
+The `demo()` helper will copy packaged example assets into the chosen `base_dir` (default: `./<example_name>`), then invoke the example's canonical `run()` entrypoint. This ensures examples are self-contained and repeatable.
 ```python
 from sagemage import ParamSet
 
@@ -382,6 +341,167 @@ class CustomAgent(Agent):
 agent = CustomAgent(config)
 results = agent.run_custom(project_dir)
 ```
+
+## Inlets and Outlets
+
+### Multi-Inlet Processing
+
+Agents can consume multiple input datasets with independent chunking. Each inlet can specify its own dataset configuration.
+
+```json
+{
+  "multi_input_agent": {
+    "inlets": [
+      {
+        "uri": "data/objects.csv",
+        "type": "FS",
+        "dataset_name": "objects",
+        "dataset_id_column": "id",
+        "dataset_columns": ["name", "description"],
+        "chunk_size": 2
+      },
+      {
+        "uri": "data/categories.csv",
+        "type": "FS",
+        "dataset_name": "categories",
+        "dataset_id_column": "cat_id",
+        "dataset_columns": ["category"],
+        "chunk_size": -1
+      }
+    ]
+  }
+}
+```
+
+**Inlet Configuration:**
+- `uri` - Path to data file (relative to project_dir for FS type)
+- `type` - Inlet type: `FS` (file system), `AM` (agent memory)
+- `dataset_name` - Name for this dataset in prompts
+- `dataset_id_column` - Column containing unique IDs
+- `dataset_columns` - Columns to import from this file
+- `chunk_size` - Chunk size for this inlet (-1 = no chunking)
+
+**Cartesian Combinations:**
+When multiple inlets are provided, chunks are combined as a cartesian product:
+- Inlet 1: 3 chunks
+- Inlet 2: 1 chunk (no chunking)
+- Result: 3 combinations → 3 API calls with different data combinations
+
+### Outlet Configuration
+
+Outlets define how results are saved. Each outlet can specify different result columns.
+
+```json
+{
+  "my_agent": {
+    "outlets": [
+      {
+        "uri": "results/all_fields.csv",
+        "type": "FS",
+        "dataset_name": "results",
+        "result_columns": ["id", "name", "category", "analysis"]
+      },
+      {
+        "uri": "results/summary.csv",
+        "type": "FS",
+        "dataset_name": "summary",
+        "result_columns": ["id", "analysis"]
+      },
+      {
+        "uri": "my_agent",
+        "type": "AM",
+        "result_columns": ["id", "name", "category", "analysis"]
+      }
+    ]
+  }
+}
+```
+
+**Outlet Configuration:**
+- `uri` - File path for FS type, or agent_id for AM type
+- `type` - Outlet type: `FS` (file), `AM` (agent memory), `S3`, `KV`
+- `dataset_name` - Optional name for identification
+- `result_columns` - Columns to include in this outlet
+
+**Outlet Types:**
+- **FS** - Save to file system (CSV, JSON, JSONL)
+- **AM** - Store in agent memory for downstream agents to consume
+- **S3** - Save to S3 storage (future)
+- **KV** - Save to key-value cache (future)
+
+### Agent Chaining with Agent Memory
+
+Use AM (Agent Memory) inlets/outlets to chain agents together:
+
+```json
+{
+  "_DEFAULT_": {
+    "outlets": [{"uri": "output.csv", "type": "FS"}]
+  },
+  
+  "classifier_agent": {
+    "inlets": [{"uri": "data/input.csv", "type": "FS", "dataset_name": "items"}],
+    "outlets": [
+      {"uri": "classifier_results.csv", "type": "FS"},
+      {"uri": "classifier_agent", "type": "AM"}
+    ]
+  },
+  
+  "analyzer_agent": {
+    "inlets": [
+      {"uri": "classifier_agent", "type": "AM", "chunk_size": 100}
+    ],
+    "outlets": [
+      {"uri": "analysis_results.csv", "type": "FS"}
+    ]
+  }
+}
+```
+
+**Running chained agents:**
+
+```python
+from sagemage import AgentSet
+
+# Load configuration
+agent_set = AgentSet("config.json")
+
+# Run all agents in sequence
+results = agent_set.run_all(project_dir="/my/workspace")
+
+# Downstream agents automatically receive upstream results via AM inlets
+```
+
+Process:
+1. `classifier_agent` processes input data
+2. Results are stored in agent memory via AM outlet
+3. `analyzer_agent` consumes results via AM inlet
+4. `analyzer_agent` processes the received data
+5. Final results saved to outlet
+
+## Advanced Configuration
+
+### Dynamic Output Paths
+
+Output path is constructed as:
+```
+<project_dir>/<output_datasets['result_files']>/<outlet_uri>/<version>/
+```
+
+Example with _DEFAULT_:
+```json
+{
+  "_DEFAULT_": {
+    "project_dir": "./",
+    "output_datasets": {
+      "result_files": "result_files"
+    },
+    "output_version": "%Y-%m-%d-%H-%M-%S"
+  }
+}
+```
+
+Result files are saved to: `result_files/<outlet_uri>/<timestamp>/`
 
 ## Troubleshooting
 

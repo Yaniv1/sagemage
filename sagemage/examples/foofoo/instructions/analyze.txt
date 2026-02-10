@@ -1,0 +1,6 @@
+Analyze the classified items.
+Input: a JSON array of classified rows with fields item_id, name, type.
+If an item has multiple types - select the likeliest type for the item.
+Produce a JSON summary listing each `type` with its `items` count and `share` (fraction of total).
+Output under the JSON node `results` as an array of objects with keys: type, items, share.
+Produce only valid JSON under the `results` node.

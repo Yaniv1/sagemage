@@ -66,22 +66,113 @@ temp = params.get(["temperature"])
 ```
 
 ##### `Agent`
-Represents an agent node with configuration parameters.
+Represents an agent node with configuration parameters and orchestrates LLM-powered data processing.
 
 **Extends:** `ParamSet`
 
-**Purpose:** Inherit all `ParamSet` functionality while representing a distinct agent entity
+**Purpose:** 
+- Inherit all `ParamSet` functionality
+- Manage multiple input datasets (inlets) with independent chunking
+- Process data through LLM APIs
+- Route results to multiple outputs (outlets)
+- Support agent chaining via agent memory (AM)
+
+**Key Features:**
+
+1. **Multi-Inlet Support**
+   - Accept multiple input datasets with independent chunk sizes
+   - Each inlet specifies its own dataset configuration (columns, ID, name)
+   - Generate cartesian product combinations of chunks
+
+2. **Cartesian Chunk Combinations**
+   - If inlet1 has 3 chunks and inlet2 has 1 chunk → 3 combinations
+   - Each combination includes data from all inlets in a single prompt
+   - Enables cross-dataset analysis without explicit joins
+
+3. **Outlet Routing**
+   - Route single results set to multiple outlets
+   - Each outlet can specify different result columns
+   - Support for file system (FS), agent memory (AM), S3, and KV storage
+
+4. **Agent Memory (AM)**
+   - AM outlets store results for consumption by downstream agents
+   - AM inlets retrieve results from upstream agents
+   - Enables agent chaining and orchestrated workflows
+
+**Configuration:**
+
+```json
+{
+  "my_agent": {
+    "inlets": [
+      {
+        "uri": "data/input.csv",
+        "type": "FS",
+        "dataset_name": "items",
+        "dataset_id_column": "id",
+        "dataset_columns": ["name", "description"],
+        "chunk_size": 2
+      }
+    ],
+    "outlets": [
+      {
+        "uri": "results/output.csv",
+        "type": "FS",
+        "dataset_name": "results",
+        "result_columns": ["id", "name", "classification"]
+      },
+      {
+        "uri": "my_agent",
+        "type": "AM",
+        "result_columns": ["id", "name", "classification"]
+      }
+    ],
+    "instructions": "instructions/prompt.txt",
+    "chunk_size": 10
+  }
+}
+```
+
+**Agent Lifecycle:**
+
+1. **Load Inlets** - Load data from all inlet sources (FS, AM)
+2. **Process Datasets** - Create textual representations and group data
+3. **Chunk Each Inlet** - Apply inlet-specific chunk sizes
+4. **Generate Combinations** - Create cartesian product of all chunks
+5. **Process Each Combination**:
+   - Build prompt with data from all inlets
+   - Call LLM API
+   - Parse response into structured results
+6. **Route Results** - Save combined results to all outlets
+7. **Agent Memory** - Store in agent memory for downstream consumption
+
+**Attributes:**
+
+- `agent_id` - Unique identifier for this agent
+- `results` - DataFrame containing processed results (set after run())
+
+**Methods:**
+
+- `run(project_dir, input_df, agent_outputs, agents_dict)` - Execute agent and return results
 
 **Example:**
-```python
-from sagemage import Agent
 
-agent_config = {
-    "role": "analyzer",
-    "model": "gpt-4",
-    "temperature": 0.5
+```python
+from sagemage import Agent, AgentSet
+import json
+
+# Single agent
+config = {
+  "name": "classifier",
+  "inlets": [{"uri": "data/input.csv", "type": "FS"}],
+  "outlets": [{"uri": "results.csv", "type": "FS"}]
 }
-agent = Agent(agent_config)
+agent = Agent(config)
+results = agent.run(project_dir="/my/work")
+
+# Agent set with chaining
+agent_set = AgentSet("config.json")
+results = agent_set.run_all(project_dir="/my/work")
 ```
 
 ---
@@ -161,6 +252,41 @@ import pandas as pd
 
 flat_df = flatten_dataframe(df, combination_id="combo_id")
 ```
+
+## Packaging and Runtime Behavior
+
+### Versioning (single source of truth)
+
+SAGEMAGE stores the package version in `sagemage/version.txt`. Build-time metadata (setuptools/pyproject) and runtime `__version__` both read from that file so there is a single source of truth for version numbers. The `pyproject.toml` uses `dynamic = ["version"]` and `tool.setuptools.dynamic.version = {file = ["sagemage/version.txt"]}` so packaging reads the same value that runtime exposes.
+
+### Lazy imports to avoid build-time dependency issues
+
+Top-level module import avoids importing heavy runtime dependencies (like `pandas`) during package metadata extraction. The package `__init__` reads `version.txt` and exposes a lazy attribute import via `__getattr__`, which imports submodules on first access. This prevents setuptools/pip metadata preparation from failing when runtime dependencies are not yet installed in the isolated build environment.
+
+### Examples distribution and demo dispatcher
+
+Examples are included under `sagemage/examples` and are packaged with the distribution. Each example provides a canonical entrypoint `run(base_dir, api_key_value=None, reset=False)`.
+
+To simplify usage, SAGEMAGE exposes a dispatcher:
+
+```python
+from sagemage.examples import demo, list_examples
+
+print(list_examples())
+demo("foofoo")  # copies packaged assets into ./foofoo then runs the example
+```
+
+`demo()` copies packaged example assets into a local workspace (default `./<example_name>`) and invokes the example's `run()` function. The optional `reset=True` argument forces rebuilding the workspace from the packaged assets.
+
+### Agent runtime behavior
+
+`Agent.run()` orchestrates the full execution lifecycle:
+
+- Loads dataset using `Dataset` from the configured `input_file` and `dataset_columns`.
+- Chunking based on `chunk_size` and `max_items`.
+- Reads instructions and optional resources.
+- Constructs prompts via `ApiClient.construct_prompt`, performs LLM requests via `ApiClient.get_response`, and parses structured outputs via `ApiClient.parse_response`.
+- Aggregates parsed results into a `pandas.DataFrame` and (optionally) saves per-chunk outputs under `output_path` when configured.
 
 ---
 
