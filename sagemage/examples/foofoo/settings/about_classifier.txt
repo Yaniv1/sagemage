@@ -1,0 +1,2 @@
+foofoo demo: the classifier that tags items by type.
+This demo shows how `AgentSet` chains a classifier's output into an analyzer.

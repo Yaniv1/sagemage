@@ -9,7 +9,7 @@ from pathlib import Path
 from sagemage.core import AgentSet
 
 
-def run(base_dir: str = None, api_key_value: str = None, reset: bool = False):
+def run(base_dir: str = None, api_key_value: str = None, reset: bool = False, verbose: bool = False):
     """Create a local foofoo example workspace and run the foofoo demo.
 
     Args:
@@ -24,16 +24,21 @@ def run(base_dir: str = None, api_key_value: str = None, reset: bool = False):
     settings_dir = base / 'settings'
     inputs_dir = base / 'inputs'
     instr_dir = base / 'instructions'
-
-    # If reset is True, clean up the config/input directories first
-    if reset:
-        for d in (settings_dir, inputs_dir, instr_dir):
-            if d.exists():
-                shutil.rmtree(d)
+    
+    # if reset and os.path.isdir(base):
+    #     shutil.rmtree(base)   
 
     for d in (settings_dir, inputs_dir, instr_dir):
-        d.mkdir(parents=True, exist_ok=True)
-
+        os.makedirs(d, exist_ok=True)
+                
+        for f,g,h in os.walk(Path(__file__).parent / d.name):
+            for i in h:
+                src_file = Path(f) / i
+                dst_file = d / i
+                if reset or not dst_file.exists():
+                    shutil.copy(src_file, dst_file)
+                    if verbose: print(f"Copied {src_file} to {dst_file}")
+    
     # write files (do not overwrite existing non-empty files, unless reset=True)
     settings_file = settings_dir / 'foofoo.json'
     api_key_file = settings_dir / 'api_key.txt'
@@ -41,27 +46,34 @@ def run(base_dir: str = None, api_key_value: str = None, reset: bool = False):
     # copy packaged mapping-style settings and about
     src_settings = Path(__file__).parent / 'settings' / 'foofoo.json'
     src_about = Path(__file__).parent / 'settings' / 'about.txt'
-    if not settings_file.exists():
-        shutil.copy(src_settings, settings_file)
-    # copy about
-    if src_about.exists():
-        shutil.copy(src_about, settings_dir / 'about.txt')
+    
+    # if not settings_file.exists():
+    #     shutil.copy(src_settings, settings_file)
+    # # copy about
+    # if src_about.exists():
+    #     shutil.copy(src_about, settings_dir / 'about.txt')
 
     if api_key_value is not None or not api_key_file.exists():
         api_key_file.write_text((api_key_value or "YOUR_API_KEY_HERE") + "\n", encoding='utf-8')
 
+    if verbose: 
+        for f,g,h in os.walk(base):
+            for i in h:
+                print(Path(f) / i)
+    
     # run agents via AgentSet using the settings mapping
     aset = AgentSet(source=str(settings_file))
-    print(f"Running foofoo agents at {base}")
+    if verbose: print(f"Running foofoo agents at {base}")
     results = aset.run_all(project_dir=str(base))
 
-    print("Finished. Results preview:")
-    for k, v in results.items():
-        print(f"-- {k} --")
-        try:
-            print(v.head() if hasattr(v, 'head') else v)
-        except Exception:
-            print(str(v))
+    if verbose: 
+        print("Finished. Results preview:")
+        for k, v in results.items():
+            print(f"-- {k} --")
+            try:
+                print(v.head() if hasattr(v, 'head') else v)
+            except Exception:
+                print(str(v))
 
     return results
 

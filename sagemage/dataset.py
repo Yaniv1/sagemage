@@ -15,7 +15,9 @@ class Dataset:
 
     def __init__(
         self,
+        name: str = "dataset",
         input_path: str = "",
+        input_data: Optional[pd.DataFrame] = None,
         output_path: str = "",
         id_column: str = "id",
         columns: Optional[List[str]] = None,
@@ -49,8 +51,9 @@ class Dataset:
             output_format="json",
             group_columns=[],
             chunk_size=1,
+            verbose=False
         )
-
+        self.name = name
         self.input_path = input_path
         self.output_path = output_path
         self.id_column = id_column
@@ -58,41 +61,53 @@ class Dataset:
 
         for k, v in self.defaults.items():
             setattr(self, k, kwargs.get(k, v))
-
-        if os.path.isfile(self.input_path):
-            self.load()
+        
+        self.df = input_data.copy() if input_data is not None else None
+                   
+        if type(self.input_path) == str and os.path.isfile(self.input_path) or self.df is not None:            
+            self.load()       
 
         if self.output_path:
+            if self.verbose: print(f"Saving dataset '{self.name}' groups and chunks  to {self.output_path}...")
             self.save()
 
     def load(self, **kwargs) -> None:
         """Load the input file into a DataFrame."""
+        
         file = self.input_path
         columns = self.columns
         id_column = self.id_column
-
-        if file == "":
-            file = getattr(self, "file", "")
-        if id_column == "":
-            id_column = self.id_column
-
-        sheet_name = self.sheet_name
-        root = self.root
-
-        # Load based on file format
-        file_ext = file.split(".")[-1].lower()
-        if file_ext == "csv":
-            df = pd.read_csv(file)
-        elif file_ext in ["xls", "xlsx"]:
-            df = pd.read_excel(file, sheet_name=sheet_name)
-        elif file_ext == "json":
-            with open(file, "r") as json_file:
-                items_dict = json.load(json_file)
-                if root is not None:
-                    items_dict = items_dict.get(root)
-                df = pd.DataFrame(items_dict)
+        
+        
+        if self.df is not None:
+            df = self.df.copy()        
         else:
-            raise ValueError(f"Unsupported file format: {file_ext}")
+        
+            if file == "":
+                file = getattr(self, "file", "")
+            if id_column == "":
+                id_column = self.id_column
+
+            sheet_name = self.sheet_name
+            root = self.root
+
+            # Load based on file format
+            file_ext = file.split(".")[-1].lower()
+            if file_ext == "csv":
+                df = pd.read_csv(file)
+            elif file_ext in ["xls", "xlsx"]:
+                df = pd.read_excel(file, sheet_name=sheet_name)
+            elif file_ext == "json":
+                with open(file, "r") as json_file:
+                    items_dict = json.load(json_file)
+                    if root is not None:
+                        items_dict = items_dict.get(root)
+                    df = pd.DataFrame(items_dict)
+            else:
+                raise ValueError(f"Unsupported file format: {file_ext}")
+        
+        if df is not None:
+            if self.verbose: print(f"Loaded data from {file}:\n{df.head()}")
 
         item_ids = []
         items = []
@@ -123,7 +138,9 @@ class Dataset:
         self.items = items
 
         self.group()
+        if self.verbose: print(f"Grouped data:\n{list(self.groups.keys())}")
         self.chunk()
+        if self.verbose: print(f"Chunked data:\n{list(self.chunks.keys())}")
 
     def group(self) -> None:
         """Group DataFrame by specified columns."""
@@ -138,13 +155,13 @@ class Dataset:
                 group_key = "/".join(
                     [f"{group_columns[c]}={g[c]}" for c in range(len(group_columns))]
                 )
-                group_path = f"{self.output_path}/{os.path.basename(self.input_path).replace('.', '_')}/{group_key}/{group_key.replace('/', '_')}.{self.output_format}"
+                group_path = f"{self.output_path}/{self.name.replace('.', '_')}/{group_key.replace('/', '_')}.{self.output_format}"
                 group_data = self.df.iloc[gids]
 
                 groups.update({group_path: group_data})
 
         else:
-            group_path = f"{self.output_path}/{os.path.basename(self.input_path).replace('.', '_')}.{self.output_format}"
+            group_path = f"{self.output_path}/{self.name.replace('.', '_')}.{self.output_format}"
             groups.update({group_path: self.df})
 
         self.groups = groups
@@ -154,7 +171,7 @@ class Dataset:
         ds_chunks = {}
 
         for g, gdf in self.groups.items():
-            n_chunks = int(np.ceil(len(gdf) / self.chunk_size))
+            n_chunks = max(1,int(np.ceil(len(gdf) / self.chunk_size))) # Ensure at least 1 chunk
             chunks = [ch for ch in np.array_split(gdf, n_chunks)]
             for i, ch in enumerate(chunks):
                 chunk_path = g.split("/")
@@ -168,6 +185,7 @@ class Dataset:
 
     def save(self) -> None:
         """Save grouped and chunked data to files."""
+        if self.verbose: print(self.groups.keys())
         for g, gdf in self.groups.items():
             data = gdf.copy()
             if self.output_format == "json":
@@ -176,6 +194,7 @@ class Dataset:
                 }
             save_to_path(data, g, append=False)
 
+        if self.verbose: print(self.chunks.keys())
         for c, cdf in self.chunks.items():
             data = cdf.copy()
             if self.output_format == "json":

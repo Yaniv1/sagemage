@@ -26,7 +26,7 @@ def print_dict(my_dict: Dict[str, Any]) -> None:
             print(k, "\t\t=\t\t", v)
 
 
-def save_to_path(obj: Any, path: str, append: bool = False) -> bool:
+def save_to_path(obj: Any, path: str, append: bool = False, verbose: bool = False) -> bool:
     """
     Save an object to a file.
 
@@ -40,8 +40,11 @@ def save_to_path(obj: Any, path: str, append: bool = False) -> bool:
     Returns:
         True if successful, False otherwise. Returns exception object on error.
     """
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-
+    
+    folder = os.path.dirname(os.path.abspath(path))
+    os.makedirs(folder, exist_ok=True)
+    if verbose: print(f"{folder=}: {os.path.isfolder(folder)}")
+    if verbose: print(f"{fpath=}")
     if obj is not None:
         fmode = "w"
         if append:
@@ -50,17 +53,21 @@ def save_to_path(obj: Any, path: str, append: bool = False) -> bool:
 
         try:
             path_lower = path.lower()
+            if verbose: print(f"{path_lower=}")
             if path_lower.endswith(".json"):
                 with open(path, mode=fmode) as f:
+                    if verbose: print(f"{f=}")
                     json.dump(obj, f, indent=4, default=str)
             elif path_lower.endswith(".csv"):
                 obj.to_csv(path, mode=fmode, index=False, encoding="utf-8")
+                
             elif path_lower.endswith((".xlsx", ".xls")):
                 obj.to_excel(path)
             elif path_lower.endswith(".txt"):
                 with open(path, mode=fmode) as f:
+                    if verbose: print(f"{f=}")
                     f.write(obj)
-
+            if verbose: print(f"{os.path.isfile(path)=}")
             return os.path.isfile(path)
 
         except Exception as e:

@@ -224,7 +224,7 @@ class ApiClient:
                     results.strip(),
                     flags=re.DOTALL | re.IGNORECASE,
                 )
-                print(results)
+                print('Results:\n',results)
 
                 try:
                     rdf = pd.DataFrame(json.loads(results)[json_node])
@@ -233,6 +233,9 @@ class ApiClient:
                     sdf = pd.concat([sdf, rdf])
                 except Exception as err_parse_response:
                     print(f"Error parsing response: {err_parse_response=}")
+            
+            elif format.lower() == "txt":
+                sdf = pd.DataFrame({"response": [response.get("response").choices[0].message.content]})
 
         except Exception as e:
             print(f"Error in parse_response: {e}")

@@ -1,0 +1,15 @@
+Create a short story that includes emphasis on the different types of items according to their relative share.
+For example, if the type "human" is the most common then the story will focus on a human.
+Then according to declining share more items will be added to the story with relative importance.
+Return only the story itself without any additional text that preambles, summarizes, or explains it.
+Return it as a valid JSON arrary under the root node 'results':
+{
+    "results": [
+        {
+            "story":"{story}"
+        }
+    ]
+}
+Return any raw escape character in a parsable way. For example: new line should be '\\n' and not '\n'.
+
+{$DATA$}

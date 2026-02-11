@@ -3,15 +3,19 @@
     "name": "default_agent",
     "type": "GENERATIVE_ANALYZER",
     "about": "settings/about.txt",
+    "verbose": true,
+    "delta": true,
     "project_dir": "./",
     "api_key": "settings/api_key.txt",
+    "textual": "ITEM",
     "output_datasets": {
       "input_files": "input_files",
       "result_files": "result_files",
       "prompts": "prompts",
       "analysis": "analysis"
     },
-    "output_version": "%Y-%m-%d-%H-%M-%S",
+
+    "output_version": "%Y-%m-%d",
     "output_extension": "json",
     "json_node": "results",
     "outlets": [
@@ -23,11 +27,17 @@
   },
 
   "a1_foofoo_classifier": {
+    "name": "Classifier",
+    "type": "GENERATIVE_ANALYZER",
+    "about": "settings/about_classifier.txt",
+    "execute": true,
+    "verbose": true,
+    "delta": true,
     "inlets": [
       {
         "uri": "inputs/objects.csv",
         "type": "FS",
-        "dataset_name": "foofoo",
+        "dataset_name": "Objects",
         "dataset_id_column": "item_id",
         "dataset_columns": ["name"],
         "chunk_size": 2
@@ -35,50 +45,89 @@
       {
         "uri": "inputs/types.csv",
         "type": "FS",
-        "dataset_name": "types",
+        "dataset_name": "Types",
         "dataset_id_column": "tid",
         "dataset_columns": ["type_name"],
         "chunk_size": -1
       }
     ],
-    "instructions": "instructions/classify.txt",
-    "execute": true,
-    "verbose": true,
+    "instructions": "instructions/classify.txt",    
+    "result_columns": ["item_id", "name", "type"],
     "outlets": [
       {
-        "uri": "foofoo_classifier_results.csv",
+        "uri": "foofoo_classifier_results",
         "type": "FS",
-        "dataset_name": "foofoo",
-        "result_columns": ["item_id", "name", "type"]
+        "dataset_name": "Classifications",
+        "dataset_id_column": "item_id",
+        "result_columns": ["name", "type"]
       },
       {
         "uri": "a1_foofoo_classifier",
         "type": "AM",
-        "dataset_name": "foofoo",
-        "result_columns": ["item_id", "name", "type"]
+        "dataset_name": "Classifications",
+        "dataset_id_column": "item_id",
+        "result_columns": ["name", "type"]
       }
     ]
   },
 
   "a2_foofoo_analyzer": {
-    "name": "foofoo_analyzer",
+    "name": "Analyzer",
+    "type": "GENERATIVE_ANALYZER",
+    "about": "settings/about_analyzer.txt",
+    "execute": true,
+    "verbose": true,
+    "delta": true,
     "inlets": [
       {
         "uri": "a1_foofoo_classifier",
         "type": "AM",
+        "dataset_name": "Classifications",
+        "dataset_id_column": "item_id",
+        "dataset_columns": ["name", "type"],
         "chunk_size": -1
       }
     ],
-    "instructions": "instructions/analyze.txt",
-    "execute": true,
-    "verbose": true,
+    "instructions": "instructions/analyze.txt",    
     "outlets": [
       {
-        "uri": "foofoo_analysis_results.csv",
+        "uri": "a2_foofoo_analyzer_results",
         "type": "FS",
-        "dataset_name": "analysis",
+        "dataset_name": "Summary",
         "result_columns": ["type", "items", "share"]
       }
     ]
+  },
+
+
+  
+  "a3_foofoo_create": {
+    "name": "Creator",
+    "type": "GENERATIVE_ANALYZER",
+    "about": "settings/creator.txt",
+    "execute": true,
+    "verbose": true,
+    "delta": false,
+    "inlets": [
+      {
+        "uri": "a2_foofoo_analyzer",
+        "type": "AM",
+        "dataset_name": "Summary",
+        "dataset_id_column": "type",
+        "dataset_columns": ["items", "share"],
+        "chunk_size": -1
+      }
+    ],
+    "instructions": "instructions/create.txt",   
+    "output_extension": "json", 
+    "outlets": [
+      {
+        "uri": "a3_foofoo_create_results",
+        "type": "FS",
+        "dataset_name": "Story",
+        "result_columns": ["story"]
+      }
+    ]
+    
   }
 }

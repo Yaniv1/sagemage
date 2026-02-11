@@ -1,0 +1,1 @@
+foofoo demo: the analyzer summarizes tag counts and shares.

@@ -5,6 +5,8 @@ into a local working directory and invokes the example's run function.
 """
 from __future__ import annotations
 
+import os
+import sys
 import importlib
 import shutil
 from pathlib import Path
@@ -28,28 +30,22 @@ def _copy_example_files(example_name: str, dest: Path, reset: bool = False) -> P
     with pkg_resources.as_file(example_files) as src_dir:
         src = Path(src_dir)
         dest.mkdir(parents=True, exist_ok=True)
-        # If reset, remove existing target subfolders we will recreate
-        if reset and dest.exists():
-            for child in (dest / "settings", dest / "inputs", dest / "instructions"):
-                if child.exists():
-                    if child.is_dir():
-                        shutil.rmtree(child)
-                    else:
-                        child.unlink()
+        
         # Copy contents into dest (allow existing dirs)
-        for item in src.iterdir():
-            target = dest / item.name
-            if item.is_dir():
-                shutil.copytree(item, target, dirs_exist_ok=True)
-            else:
-                # copy files, overwrite if reset or not exists
-                if not target.exists() or reset:
-                    shutil.copy2(item, target)
-
+        for f,g,h in os.walk(src):
+            for i in h:
+                src_file = os.path.join(f, i)
+                rel_path = os.path.relpath(src_file, src)
+                dest_file = os.path.join(dest, rel_path)
+                dest_file_dir = os.path.dirname(dest_file)
+                os.makedirs(dest_file_dir, exist_ok=True)
+                if reset or not os.path.exists(dest_file):
+                    shutil.copy2(src_file, dest_file)
+        
     return dest
 
 
-def demo(example_name: str = "foofoo", base_dir: Optional[str] = None, api_key_value: Optional[str] = None, reset: bool = False):
+def demo(example_name: str = "foofoo", base_dir: Optional[str] = None, api_key_value: Optional[str] = None, reset: bool = False , verbose: bool = False):
     """Run a packaged example by name.
 
     - Copies the example files into `base_dir` (defaults to `./<example_name>`)
@@ -63,7 +59,7 @@ def demo(example_name: str = "foofoo", base_dir: Optional[str] = None, api_key_v
         base = Path(base_dir)
     base = base.resolve()
 
-    _copy_example_files(example_name, base, reset=reset)
+    # _copy_example_files(example_name, base, reset=reset)
 
     module_name = f"sagemage.examples.{example_name}"
     mod = importlib.import_module(module_name)
@@ -77,7 +73,7 @@ def demo(example_name: str = "foofoo", base_dir: Optional[str] = None, api_key_v
     if entry is None:
         raise AttributeError(f"Example module {module_name} has no callable entrypoint (run or {example_name})")
 
-    return entry(str(base), api_key_value, reset)
+    return entry(str(base), api_key_value, reset, verbose)
 
 
 def list_examples():

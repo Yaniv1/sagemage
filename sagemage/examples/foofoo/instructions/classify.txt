@@ -6,3 +6,7 @@ For example:
 - a dog is a mammal. If there is mammal in the list - return mammal. Otherwise, the closest type is animal - return animal.
 - a car is a vehicle. If there is vehicle in the list - return vehicle. Otherwise, the closest type is object - return object.
 - "Star Wars: The Return of the Jedi" is a movie. If there is movie in the list - return movie. Otherwise, no type in the list is close enough, so return "not listed: movie".
+
+{$DATA$}
+
+{$RESOURCES$} 
