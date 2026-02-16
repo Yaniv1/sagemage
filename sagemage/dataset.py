@@ -2,12 +2,104 @@
 
 import json
 import os
+import random
 from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+import datetime as dt
+
 
 from .utils import flatten_dataframe, save_to_path, setattrs
+
+
+# ==========================================================
+# 🔐 SAFE DATAFRAME CONVERTER
+# ==========================================================
+
+class DataFrameConverter:
+    """
+    Securely applies transformation rules to a pandas DataFrame.
+
+    Supports:
+        - Column-level transformations
+        - Row-level transformations
+        - Full DataFrame expressions
+        - Optional filtering
+        - Safe support for datetime via `dt`, numpy via `np`, and pandas via `pd`
+    """
+
+    SAFE_GLOBALS = {
+        "__builtins__": {},
+        "np": np,
+        "pd": pd,
+        "dt": dt,
+        "abs": abs,
+        "min": min,
+        "max": max,
+        "sum": sum,
+        "len": len,
+        "round": round,
+        "float": float,
+        "int": int,
+        "str": str,
+    }
+
+    def __init__(self, conversions: Optional[List[Dict]] = None, verbose: bool = False):
+        self.conversions = conversions or []
+        self.verbose = verbose
+
+    def _safe_eval(self, expr: str, local_vars: Dict[str, Any]):
+        """Safely evaluate an expression with restricted globals."""
+        try:
+            return eval(expr, self.SAFE_GLOBALS, local_vars)
+        except Exception as e:
+            raise ValueError(f"Conversion expression failed: {expr}\n{str(e)}")
+
+    def apply(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Apply conversion list to DataFrame."""
+        df = df.copy()
+
+        for conv in self.conversions:
+            target = conv.get("target")
+            source = conv.get("source")
+            op = conv.get("op")
+            scope = conv.get("scope", "col")  # col | row | df
+            filt = conv.get("filter")
+
+            if not target or not op:
+                continue
+
+            if self.verbose:
+                print(f"Applying conversion -> {target} | scope={scope}")
+
+            # Optional filtering
+            if filt:
+                df = df[df[source].isin(filt)]
+
+            if scope == "col":
+                if source not in df.columns:
+                    continue
+                df[target] = df[source].apply(
+                    lambda v: self._safe_eval(op, {"v": v, "df": df})
+                )
+
+            elif scope == "row":
+                df[target] = df.apply(
+                    lambda row: self._safe_eval(
+                        op,
+                        {
+                            "row": row,
+                            "df": df,
+                        },
+                    ),
+                    axis=1,
+                )
+
+            elif scope == "df":
+                df = self._safe_eval(op, {"df": df})
+
+        return df
 
 
 class Dataset:
@@ -182,6 +274,56 @@ class Dataset:
                 ds_chunks.update({chunk_path: ch})
 
         self.chunks = ds_chunks
+
+    def get_chunks(self, max_chunks: Any = None, sample: Any = False) -> List:
+        """Return dataset chunks after applying optional max_chunks/sample restrictions.
+
+        Rules:
+        - max_chunks:
+          - None/False/0/-1 => no restriction
+          - number => keep first N chunks
+          - [a, b] => keep chunks in inclusive index range [a, b]
+        - sample (applied after max_chunks):
+          - False/None/0 => no restriction
+          - True/1 => randomly choose one chunk
+          - number => randomly choose N chunks
+        """
+        chunks_dict = getattr(self, "chunks", {})
+        chunks_list = list(chunks_dict.items()) if chunks_dict else [("full", self.df)]
+        filtered = list(chunks_list)
+
+        # 1) max_chunks restriction
+        if max_chunks not in [None, False, 0, -1]:
+            if isinstance(max_chunks, (list, tuple)) and len(max_chunks) == 2:
+                try:
+                    start = int(max_chunks[0])
+                    end = int(max_chunks[1])
+                    lo, hi = sorted([start, end])
+                    lo = max(0, lo)
+                    hi = max(0, hi)
+                    filtered = filtered[lo:hi + 1]
+                except Exception:
+                    if self.verbose:
+                        print(f"Invalid max_chunks range ignored: {max_chunks}")
+            elif isinstance(max_chunks, (int, float)) and not isinstance(max_chunks, bool):
+                n = int(max_chunks)
+                if n > 0:
+                    filtered = filtered[:n]
+
+        # 2) sample restriction (drawn after max_chunks)
+        sample_n = None
+        if sample is True:
+            sample_n = 1
+        elif isinstance(sample, (int, float)) and not isinstance(sample, bool):
+            sample_i = int(sample)
+            if sample_i > 0:
+                sample_n = sample_i
+
+        if sample_n is not None and len(filtered) > 0:
+            sample_n = min(sample_n, len(filtered))
+            filtered = random.sample(filtered, sample_n)
+
+        return filtered
 
     def save(self) -> None:
         """Save grouped and chunked data to files."""

@@ -352,15 +352,39 @@ class Agent(ParamSet):
                 except Exception:
                     pass
 
-        # Initialize API client (attempt to use openai if available)
-        client_cls = None
-        try:
-            import openai
+        # Build API client configuration from agent params.
+        api_client_cfg = {}        
+        model_cfg = getattr(self, "model", "gpt-4")
+        if isinstance(model_cfg, dict):
+            api_client_cfg.update(model_cfg.copy())
+        else:
+            api_client_cfg["model"] = model_cfg
 
-            client_cls = openai.OpenAI
-        except Exception:
-            client_cls = None
+        explicit_api_client_cfg = getattr(self, "api_client", None)
+        if isinstance(explicit_api_client_cfg, dict):
+            api_client_cfg.update(explicit_api_client_cfg.copy())
 
+        # Accept "version" as alias for model name.
+        if "version" in api_client_cfg and "model" not in api_client_cfg:
+            api_client_cfg["model"] = api_client_cfg.pop("version")
+
+        for k in ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"]:
+            if hasattr(self, k) and k not in api_client_cfg:
+                api_client_cfg[k] = getattr(self, k)
+
+        # Allow api_key in api_client/model config as fallback.
+        cfg_api_key = api_client_cfg.pop("api_key", "")
+        if not api_key and cfg_api_key:
+            api_key = cfg_api_key
+
+        # Default to OpenAI client when no explicit client was provided.
+        if "client" not in api_client_cfg:
+            try:
+                import openai
+
+                api_client_cfg["client"] = openai.OpenAI
+            except Exception:
+                api_client_cfg["client"] = None
         
         
         # Get outlets configuration
@@ -384,12 +408,11 @@ class Agent(ParamSet):
         all_chunks = {}  # {inlet_uri: [(chunk_key, chunk_df), ...]}
         for inlet_uri, dataset in datasets.items():
             chunks_list = []
-            chunks_dict = getattr(dataset, "chunks", {})
-            if not chunks_dict:
-                # If no chunks, treat entire dataset as single chunk
-                chunks_list = [("full", dataset.df)]
-            else:
-                chunks_list = list(chunks_dict.items())
+            inlet_cfg = getattr(dataset, "inlet", {})
+            chunks_list = dataset.get_chunks(
+                max_chunks=inlet_cfg.get("max_chunks", None),
+                sample=inlet_cfg.get("sample", False),
+            )
             all_chunks[inlet_uri] = chunks_list
         
         # Create combinations of chunks from all inlets (cartesian product)
@@ -445,7 +468,7 @@ class Agent(ParamSet):
                 if self.verbose: print(f"{prompt_data=}")
                 
                 # Construct ApiClient              
-                api_client = ApiClient(client=client_cls, api_key=api_key)
+                api_client = ApiClient(api_key=api_key, **api_client_cfg)
                 # Construct full prompt with instructions, resources, and data  
                 prompt = api_client.construct_prompt(
                     items=prompt_items,
@@ -478,6 +501,7 @@ class Agent(ParamSet):
                     data_columns=getattr(self, "result_columns", []),
                 )
                 
+                                
                 # Handle outlets - save to configured output locations
             
                 for i,row in outlets_df.iterrows():
@@ -489,6 +513,19 @@ class Agent(ParamSet):
                                                         f"{combination_key}.csv").replace('\\','/')
                         if self.verbose: print(f"Saving combination result to {comb_result_path} for outlet {outlet.get('dataset_name',outlet.get('uri'))}")
                         save_outlet(outlet, comb_df, comb_result_path)
+                        
+                        if getattr(self, "output_extension", "json"):
+                            jf_result_path = os.path.join(outlet["output_path"], 
+                                                        f"{combination_key}.json").replace('\\','/')
+                            jf = [{c:row[c] for c in comb_df.columns} for i,row in comb_df.iterrows()]
+                            save_outlet(outlet, jf, jf_result_path)
+                                                    
+                        elif getattr(self, "output_extension", "txt"):
+                            tf_result_path = os.path.join(outlet["output_path"], 
+                                                        f"{combination_key}.txt").replace('\\','/')
+                            tf = list(comb_df['response'].values)[0]
+                            save_outlet(outlet, tf, tf_result_path)
+                    
                     elif outlet_type == "AM":
                         # Agent memory - just mark that this is available
                         # Data will be retrieved by next agent via inlets with type="AM"

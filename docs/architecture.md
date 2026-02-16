@@ -128,6 +128,14 @@ Represents an agent node with configuration parameters and orchestrates LLM-powe
       }
     ],
     "instructions": "instructions/prompt.txt",
+    "model": {
+      "client": "openai.OpenAI",
+      "version": "gpt-5.1",
+      "temperature": 0.7
+    },
+    "api_client": {
+      "max_tokens": 4096
+    },
     "chunk_size": 10
   }
 }
@@ -285,8 +293,18 @@ demo("foofoo")  # copies packaged assets into ./foofoo then runs the example
 - Loads dataset using `Dataset` from the configured `input_file` and `dataset_columns`.
 - Chunking based on `chunk_size` and `max_items`.
 - Reads instructions and optional resources.
+- Resolves LLM client params from agent config (`model` + `api_client` + top-level fallbacks).
 - Constructs prompts via `ApiClient.construct_prompt`, performs LLM requests via `ApiClient.get_response`, and parses structured outputs via `ApiClient.parse_response`.
 - Aggregates parsed results into a `pandas.DataFrame` and (optionally) saves per-chunk outputs under `output_path` when configured.
+
+`ApiClient.get_response()` applies model-specific request argument mapping for OpenAI clients. For GPT-5-family model names (`gpt-5*`), SAGEMAGE sends `max_completion_tokens` while allowing agent configs to keep using `max_tokens`.
+
+`model`/`api_client` resolution order inside `Agent.run()`:
+1. `model` (string or object) initializes API client config.
+2. `api_client` object overlays and overrides `model`.
+3. `version` is accepted as alias for `model`.
+4. Top-level sampling params fill only missing keys (`temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`).
+5. `api_key` may come from top-level agent config or fallback inside `model`/`api_client`.
 
 ---
 
@@ -365,7 +383,7 @@ ds = Dataset(
 Manages LLM interactions with:
 - Prompt construction with data injection
 - API calls with error handling
-- Response parsing into structured data (JSON/CSV)
+- Response parsing into structured data (JSON/CSV/TXT)
 - Optional merging with input data
 
 **Initialization Parameters:**
@@ -373,13 +391,16 @@ Manages LLM interactions with:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `client` | class | None | API client class (e.g., openai.OpenAI) |
-| `model` | str | "gpt-4" | Model name |
+| `model` | str or dict | "gpt-4" | Model name or model config (supports `version` alias) |
 | `api_key` | str | "" | API authentication key |
 | `temperature` | float | 1 | Sampling temperature |
 | `max_tokens` | int | 4096 | Max response tokens |
 | `top_p` | float | 1 | Nucleus sampling |
 | `frequency_penalty` | float | 0 | Repetition penalty |
 | `presence_penalty` | float | 0 | Diversity penalty |
+
+When `client` is a string, `ApiClient` resolves dotted import paths such as `openai.OpenAI` at runtime.
+For GPT-5-family models, `max_tokens` is mapped to `max_completion_tokens` in outbound OpenAI requests.
 
 **Key Methods:**
 
@@ -423,6 +444,7 @@ Parses LLM response into structured DataFrame
 **Supported Formats:**
 - `"json"` - Extract JSON with optional merge to input
 - `"csv"` - Parse CSV-formatted response
+- `"txt"` - Keep raw model text in a `response` column
 
 **Parameters:**
 - `response` - Response dict from `get_response()`
@@ -491,9 +513,9 @@ Organized Files
              ↓
          Results DataFrame
              ↓
-         save_to_path()
+         outlet persistence
              ↓
-         Output File
+         CSV + optional JSON/TXT files
 ```
 
 ## Public API

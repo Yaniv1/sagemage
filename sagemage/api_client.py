@@ -1,9 +1,11 @@
 """API client for LLM interactions in SAGEMAGE."""
 
 import datetime as dt
+import importlib
 import json
 import re
 from typing import Any, Dict, List, Optional
+import openai
 
 import pandas as pd
 
@@ -13,10 +15,32 @@ from .utils import flatten_dataframe, setattrs
 class ApiClient:
     """Client for interacting with LLM APIs like OpenAI."""
 
+    @staticmethod
+    def _resolve_client(client: Any) -> Any:
+        """Resolve a client spec into a class/function/instance."""
+        if client is None or callable(client):
+            return client
+
+        if isinstance(client, str):
+            client = client.strip()
+            if not client:
+                return None
+
+            # Prefer dotted import path resolution when possible.
+            if "." in client and not any(ch in client for ch in "()[]{} "):
+                module_name, attr_name = client.rsplit(".", 1)
+                module = importlib.import_module(module_name)
+                return getattr(module, attr_name)
+
+            # Fallback to expression evaluation (intentionally unrestricted by request).
+            return eval(client, globals(), locals())
+
+        return client
+
     def __init__(
         self,
         client=None,
-        model: str = "gpt-4",
+        model: Any = "gpt-4",
         api_key: str = "",
         **kwargs,
     ):
@@ -25,7 +49,7 @@ class ApiClient:
 
         Args:
             client: API client class (default: openai.OpenAI)
-            model: Model name (default: "gpt-4")
+            model: Model name or model config dict (default: "gpt-4")
             api_key: API key for authentication
             **kwargs: Additional configuration
                 - temperature: Sampling temperature (default: 1)
@@ -41,14 +65,29 @@ class ApiClient:
             frequency_penalty=0,
             presence_penalty=0,
         )
+        client_kwargs = kwargs.pop("client_kwargs", {})
 
         self.api_key = api_key
-        self.model = model
+        if isinstance(model, dict):
+            local_model_cfg = model.copy()
+            self.model = local_model_cfg.pop("model", local_model_cfg.pop("version", "gpt-4"))
+            kwargs = {**local_model_cfg, **kwargs}
+        else:
+            self.model = model
 
         # Initialize client if provided
         if client is not None:
             try:
-                self.client = client(api_key=self.api_key)
+                resolved_client = self._resolve_client(client)
+                if callable(resolved_client):
+                    try:
+                        self.client = resolved_client(api_key=self.api_key, **client_kwargs)
+                    except TypeError:
+                        # Support callables that don't accept `api_key`.
+                        self.client = resolved_client(**client_kwargs)
+                else:
+                    # Already-instantiated client object.
+                    self.client = resolved_client
             except Exception as e:
                 print(f"Error initializing API client: {e}")
                 self.client = None
@@ -137,12 +176,17 @@ class ApiClient:
                     "gpt-4": {},
                     "gpt-4-turbo": {},
                     "gpt-3.5-turbo": {},
+                    "gpt-5*": {                        
+                        "max_completion_tokens": "max_tokens",
+                    }
                 }
 
                 cli_args = {}
 
                 # Map model-specific parameters
-                for pk, pv in model_params_map.get(self.model, {}).items():
+                model_params_submap = {pk:pv for pk,pv in model_params_map.items() if pk == self.model or re.match(pk, self.model) }
+                
+                for pk, pv in model_params_submap.get(self.model, {}).items():
                     cli_args.update({pk: overrides.get(pv, overrides.get(pk, getattr(self, pv)))})
 
                 # Add default parameters
@@ -156,7 +200,7 @@ class ApiClient:
                 response = self.client.chat.completions.create(**cli_args)
             else:
                 cli_args = {"prompt": prompt}
-                response = self.client.complete(**cli_args)
+                response = self.client(**cli_args)
 
         except Exception as response_error:
             print(f"Response error: {response_error=}")
@@ -203,10 +247,13 @@ class ApiClient:
             data_columns = []
 
         sdf = pd.DataFrame()
+        
+        if self.client in [openai.OpenAI, openai.AsyncOpenAI]:
+            results = response.get("response").choices[0].message.content            
 
         try:
             if format.lower() == "csv":
-                results = response.get("response").choices[0].message.content.split("\n")
+                results = results.split("\n")
                 s_array = []
                 for r in results:
                     s = r.split(". ")
@@ -217,7 +264,6 @@ class ApiClient:
                 sdf = pd.DataFrame(s_array, columns=columns)
 
             elif format.lower() == "json":
-                results = response.get("response").choices[0].message.content
                 results = re.sub(
                     r"^```json\s*|\s*```$",
                     "",
@@ -233,15 +279,16 @@ class ApiClient:
                     sdf = pd.concat([sdf, rdf])
                 except Exception as err_parse_response:
                     print(f"Error parsing response: {err_parse_response=}")
-            
+
             elif format.lower() == "txt":
-                sdf = pd.DataFrame({"response": [response.get("response").choices[0].message.content]})
+                sdf = pd.DataFrame({"response": [results]})
 
         except Exception as e:
             print(f"Error in parse_response: {e}")
             return sdf
 
         df = sdf.copy()
+        
 
         # Merge with input if provided
         if input_path:

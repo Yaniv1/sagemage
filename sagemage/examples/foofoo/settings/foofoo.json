@@ -6,6 +6,15 @@
     "verbose": true,
     "delta": true,
     "project_dir": "./",
+    "model":
+      { "client": "openai.OpenAI", 
+        "version": "gpt-5.1",    
+        "temperature": 1,
+        "max_tokens": 4096,
+        "top_p": 1,
+        "frequency_penalty": 0,
+        "presence_penalty": 0
+      },
     "api_key": "settings/api_key.txt",
     "textual": "ITEM",
     "output_datasets": {
@@ -39,8 +48,10 @@
         "type": "FS",
         "dataset_name": "Objects",
         "dataset_id_column": "item_id",
-        "dataset_columns": ["name"],
-        "chunk_size": 2
+        "dataset_columns": ["name"],        
+        "chunk_size": 2,
+        "chunks": 3,
+        "sample": true
       },
       {
         "uri": "inputs/types.csv",
@@ -51,6 +62,7 @@
         "chunk_size": -1
       }
     ],
+    "model": "gpt-5.1",
     "instructions": "instructions/classify.txt",    
     "result_columns": ["item_id", "name", "type"],
     "outlets": [

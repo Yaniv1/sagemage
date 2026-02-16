@@ -95,6 +95,16 @@ Create a configuration JSON:
   "dataset_id_column": "id",
   "dataset_columns": ["text"],
   "instructions": "instructions/prompt.txt",
+  "model": {
+    "client": "openai.OpenAI",
+    "version": "gpt-5.1",
+    "temperature": 0.7,
+    "max_tokens": 4096
+  },
+  "api_client": {
+    "top_p": 1,
+    "presence_penalty": 0
+  },
   "output_path": "results",
   "chunk_size": 10
 }
@@ -188,6 +198,51 @@ results_df = client.parse_response(
     format="json",
     json_node="results"
 )
+```
+
+### Agent-based LLM client params (recommended)
+
+`Agent.run()` builds `ApiClient(...)` from agent params using this order:
+
+1. Start from `model`:
+   - If string, it becomes `{"model": "<value>"}`.
+   - If object, all keys are used.
+2. Merge `api_client` on top (overrides `model` keys).
+3. If `version` exists and `model` is missing, `version` is renamed to `model`.
+4. Top-level params (`temperature`, `max_tokens`, `top_p`, `frequency_penalty`, `presence_penalty`) are applied only if missing.
+5. `api_key` can be provided at top level or inside `model`/`api_client` as fallback.
+
+For OpenAI GPT-5-family models (`gpt-5*`), SAGEMAGE keeps `max_tokens` in config but sends it as `max_completion_tokens` in the API call.
+
+```json
+{
+  "my_agent": {
+    "api_key": "settings/api_key.txt",
+    "model": {
+      "client": "openai.OpenAI",
+      "version": "gpt-5.1",
+      "temperature": 0.2
+    },
+    "api_client": {
+      "model": "gpt-5.1-mini",
+      "max_tokens": 2048
+    }
+  }
+}
+```
+
+In this example, effective values are `model="gpt-5.1-mini"`, `temperature=0.2`, `max_tokens=2048`.
+
+### Response Parsing Formats
+
+`ApiClient.parse_response()` supports:
+
+- `format="json"`: parse JSON and extract `json_node`.
+- `format="csv"`: parse line-based CSV-like text.
+- `format="txt"`: store raw model text in a single `response` column.
+
+```python
+results_df = client.parse_response(response, format="txt")
 ```
 
 ## Built-In Examples
@@ -297,13 +352,23 @@ config = {
     "output_extension": "json",
     "json_node": "results",
     "result_columns": ["id", "text", "classification"],
+
+    # LLM client configuration
+    "model": {
+        "client": "openai.OpenAI",
+        "version": "gpt-5.1",
+        "temperature": 0.7
+    },
+    "api_client": {
+        "max_tokens": 4096
+    },
     
     # Metadata
     "verbose": True,
     "analyze": False
 }
 
-agent = Agent(config)
+agent = Agent(params_dict=config)
 results = agent.run(project_dir="/data/my_project")
 ```
 
@@ -428,6 +493,21 @@ Outlets define how results are saved. Each outlet can specify different result c
 - **AM** - Store in agent memory for downstream agents to consume
 - **S3** - Save to S3 storage (future)
 - **KV** - Save to key-value cache (future)
+
+### Output File Extensions
+
+Agent runs always produce CSV outputs, and can additionally save per-combination files based on `output_extension`:
+
+- `"json"`: save parsed records as JSON.
+- `"txt"`: save raw text response.
+
+```json
+{
+  "my_agent": {
+    "output_extension": "txt"
+  }
+}
+```
 
 ### Agent Chaining with Agent Memory
 
